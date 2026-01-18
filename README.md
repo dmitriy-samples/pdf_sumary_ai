@@ -49,7 +49,7 @@ PDF_Summary_AI/
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
+git clone https://github.com/dmitriy-samples/pdf_sumary_ai
 cd PDF_Summary_AI
 ```
 
