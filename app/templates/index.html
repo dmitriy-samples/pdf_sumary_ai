@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Summary AI</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+        .container { max-width: 900px; margin: 0 auto; }
+        h1 { color: #333; margin-bottom: 2rem; text-align: center; }
+
+        .upload-section {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+        .upload-form {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        input[type="file"] {
+            flex: 1;
+            min-width: 200px;
+            padding: 0.5rem;
+            border: 2px dashed #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+
+        .result {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+            display: none;
+        }
+        .result.show { display: block; }
+        .result h2 { margin-bottom: 1rem; color: #333; }
+        .result-content {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            line-height: 1.6;
+        }
+
+        .history {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .history h2 { margin-bottom: 1rem; color: #333; }
+        .history-list { list-style: none; }
+        .history-item {
+            padding: 1rem;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+        }
+        .history-item:hover { background: #f8f9fa; }
+        .history-item:last-child { border-bottom: none; }
+        .history-item .filename { font-weight: 500; color: #333; }
+        .history-item .date { font-size: 0.85rem; color: #666; }
+        .history-item .summary-preview {
+            font-size: 0.9rem;
+            color: #555;
+            margin-top: 0.5rem;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 2rem;
+        }
+        .loading.show { display: block; }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007bff;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            background: #fee;
+            color: #c00;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-top: 1rem;
+            display: none;
+        }
+        .error.show { display: block; }
+
+        .empty-state {
+            text-align: center;
+            color: #666;
+            padding: 2rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>PDF Summary AI</h1>
+
+        <div class="upload-section">
+            <form class="upload-form" id="uploadForm">
+                <input type="file" id="pdfFile" accept=".pdf" required>
+                <button type="submit" id="submitBtn">Upload & Summarize</button>
+            </form>
+            <div class="error" id="error"></div>
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Processing PDF and generating summary...</p>
+        </div>
+
+        <div class="result" id="result">
+            <h2>Summary: <span id="resultFilename"></span></h2>
+            <div class="result-content" id="resultContent"></div>
+        </div>
+
+        <div class="history">
+            <h2>Recent Documents</h2>
+            <ul class="history-list" id="historyList">
+                {% if documents %}
+                    {% for doc in documents %}
+                    <li class="history-item" data-id="{{ doc.id }}">
+                        <div class="filename">{{ doc.filename }}</div>
+                        <div class="date">{{ doc.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+                        <div class="summary-preview">{{ doc.summary[:200] }}...</div>
+                    </li>
+                    {% endfor %}
+                {% else %}
+                    <li class="empty-state">No documents processed yet</li>
+                {% endif %}
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('uploadForm');
+        const fileInput = document.getElementById('pdfFile');
+        const submitBtn = document.getElementById('submitBtn');
+        const loading = document.getElementById('loading');
+        const result = document.getElementById('result');
+        const error = document.getElementById('error');
+        const resultFilename = document.getElementById('resultFilename');
+        const resultContent = document.getElementById('resultContent');
+        const historyList = document.getElementById('historyList');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            // Reset UI
+            error.classList.remove('show');
+            result.classList.remove('show');
+            loading.classList.add('show');
+            submitBtn.disabled = true;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Upload failed');
+                }
+
+                // Show result
+                resultFilename.textContent = data.filename;
+                resultContent.textContent = data.summary;
+                result.classList.add('show');
+
+                // Refresh history
+                loadHistory();
+
+            } catch (err) {
+                error.textContent = err.message;
+                error.classList.add('show');
+            } finally {
+                loading.classList.remove('show');
+                submitBtn.disabled = false;
+                fileInput.value = '';
+            }
+        });
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function loadHistory() {
+            try {
+                const response = await fetch('/history');
+                const documents = await response.json();
+
+                if (documents.length === 0) {
+                    historyList.innerHTML = '<li class="empty-state">No documents processed yet</li>';
+                    return;
+                }
+
+                historyList.innerHTML = documents.map(doc => `
+                    <li class="history-item" data-id="${escapeHtml(String(doc.id))}">
+                        <div class="filename">${escapeHtml(doc.filename)}</div>
+                        <div class="date">${escapeHtml(new Date(doc.created_at).toLocaleString())}</div>
+                        <div class="summary-preview">${escapeHtml(doc.summary.substring(0, 200))}...</div>
+                    </li>
+                `).join('');
+
+                // Re-attach click handlers
+                attachHistoryHandlers();
+            } catch (err) {
+                console.error('Failed to load history:', err);
+            }
+        }
+
+        function attachHistoryHandlers() {
+            document.querySelectorAll('.history-item').forEach(item => {
+                item.addEventListener('click', async () => {
+                    const id = item.dataset.id;
+                    try {
+                        const response = await fetch(`/document/${id}`);
+                        const doc = await response.json();
+                        resultFilename.textContent = doc.filename;
+                        resultContent.textContent = doc.summary;
+                        result.classList.add('show');
+                        result.scrollIntoView({ behavior: 'smooth' });
+                    } catch (err) {
+                        console.error('Failed to load document:', err);
+                    }
+                });
+            });
+        }
+
+        // Initial setup
+        attachHistoryHandlers();
+    </script>
+</body>
+</html>
