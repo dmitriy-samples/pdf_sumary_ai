@@ -44,10 +44,6 @@ PDF_Summary_AI/
 
 - Python 3.11+
 - API key (Google Gemini, OpenAI, or io.net)
-- Tesseract OCR (for scanned PDFs):
-  - **Ubuntu/Debian**: `sudo apt install tesseract-ocr tesseract-ocr-eng tesseract-ocr-rus`
-  - **macOS**: `brew install tesseract tesseract-lang`
-  - **Windows**: [Download installer](https://github.com/UB-Mannheim/tesseract/wiki)
 
 ### Local Development
 
@@ -81,6 +77,8 @@ uvicorn app.main:app --reload
 ```
 
 6. Open http://localhost:8000 in your browser
+
+> **Note**: For OCR support (scanned PDFs), install [Tesseract](https://github.com/tesseract-ocr/tesseract). In Docker, it's included automatically.
 
 ### Docker
 
